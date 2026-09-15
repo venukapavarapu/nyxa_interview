@@ -201,8 +201,9 @@ and a retry affordance, since right now a first-load failure is a dead end until
 
 ## 8. AI usage
 
-This entire submission was built with Claude (Claude Code) as the primary implementation tool,
-end to end: architecture layout, the mock backend, all MVI features, the native wheel/reveal
+Initially I understood the product requirement and designed high level design , and after deciding the architecture and other modules and how to manage the flow and storing the access token and then use Claude (Claude Code) as the Secondary implementation tool, and ask AI to implement this by following strong software concepts like solid principles and preferred language and other tech aspects, 
+
+End to End: The native wheel/reveal
 animations, and this test suite were AI-authored from the assignment PDF and my instructions to
 follow SOLID/Clean Architecture/MVI/Hilt/coroutines-Flow/TDD, with me reviewing and directing at
 each step (e.g., choosing Mystery Box Reveal over VIP Membership as the optional feature, and
