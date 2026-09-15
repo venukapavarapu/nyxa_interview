@@ -12,17 +12,18 @@ import com.example.nyxa_interview.domain.repository.WalletRepository
 import javax.inject.Inject
 
 /**
- * Orchestrates a single spin end-to-end with a charge-once, never-lose-a-result guarantee.
+ * Orchestrates a single spin end-to-end with a charge-once, never-lose-a-result guarantee
+ * *within the current app session* (the pending record lives in memory only — see
+ * `PendingGameActionRepository` — so it does not survive a real process kill).
  *
  * Sequence:
- * 1. Generate an idempotency key and persist it locally as "pending" *before* any network call.
- *    If the process dies here, [RecoverPendingSpinUseCase] will pick it up on next launch.
+ * 1. Generate an idempotency key and record it as "pending" *before* any network call fires.
  * 2. POST /games/spin with that key. The server is expected to de-dupe on this key, so a retry
  *    of step 2 with the same key never charges twice.
  * 3. If the call fails with a network/timeout error, the outcome is unknown to this client
  *    (the server may have settled the spin and simply failed to deliver the response). We do
- *    NOT clear the pending record and surface a [SpinOutcome.Unresolved] so the caller can show
- *    a "resolving your spin" state instead of a hard failure or a re-enabled spin button.
+ *    NOT clear the pending record and surface a [SpinOutcome.Unresolved] so the caller can keep
+ *    the spin control disabled and poll for the real result instead of failing or re-enabling it.
  * 4. On success or once resolved, clear the pending record and refresh the wallet.
  */
 class PerformSpinUseCase @Inject constructor(

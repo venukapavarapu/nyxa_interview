@@ -4,6 +4,7 @@ import com.example.nyxa_interview.core.result.AppError
 import com.example.nyxa_interview.core.result.AppResult
 import com.example.nyxa_interview.core.security.AuthSessionManager
 import com.example.nyxa_interview.data.remote.mock.MockApiException
+import com.example.nyxa_interview.data.remote.mock.toAppError
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -34,14 +35,5 @@ class AuthenticatedApiGateway @Inject constructor(
         } catch (e: Exception) {
             AppResult.Error(e.toAppError())
         }
-    }
-
-    private fun Throwable.toAppError(): AppError = when (this) {
-        is MockApiException.Unauthorized -> AppError.Unauthorized
-        is MockApiException.ServerError -> AppError.Network
-        is MockApiException.DroppedConnection -> AppError.Timeout
-        is MockApiException.NotFound -> AppError.Server(message.orEmpty())
-        is MockApiException.InsufficientSpinCredits -> AppError.InsufficientCredits
-        else -> AppError.Unknown(this)
     }
 }

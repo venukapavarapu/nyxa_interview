@@ -13,9 +13,10 @@ data class PendingGameAction(
 )
 
 /**
- * Durable record of "I asked the server to charge me for a spin/box and have not yet confirmed
- * the outcome". Written to disk *before* the network call fires, so a process death or a
- * dropped connection leaves a trail that survives app restart and can be resolved on next launch.
+ * In-memory record of "I asked the server to charge me for a spin/box and have not yet confirmed
+ * the outcome", written *before* the network call fires so a dropped connection leaves a trail
+ * that can be resolved within the same app session. Not persisted to disk (see DECISIONS.md), so
+ * this record does not survive a real process kill — only the auth token does.
  */
 interface PendingGameActionRepository {
     fun observePending(): Flow<List<PendingGameAction>>

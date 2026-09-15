@@ -4,7 +4,6 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt)
-    alias(libs.plugins.room)
 }
 
 android {
@@ -40,9 +39,6 @@ android {
         compose = true
         buildConfig = true
     }
-    room {
-        schemaDirectory("$projectDir/schemas")
-    }
     testOptions {
         unitTests {
             isIncludeAndroidResources = true
@@ -73,14 +69,9 @@ dependencies {
     implementation(libs.hilt.navigation.compose)
     ksp(libs.hilt.compiler)
 
-    implementation(libs.room.runtime)
-    implementation(libs.room.ktx)
-    ksp(libs.room.compiler)
-
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.coroutines.core)
 
-    implementation(libs.androidx.datastore.preferences)
     implementation(libs.androidx.security.crypto)
 
     implementation(libs.coil.compose)

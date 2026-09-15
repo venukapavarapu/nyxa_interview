@@ -1,11 +1,11 @@
 package com.example.nyxa_interview.data.repository
 
-import com.example.nyxa_interview.core.result.AppError
 import com.example.nyxa_interview.core.result.AppResult
 import com.example.nyxa_interview.core.security.AuthSessionManager
 import com.example.nyxa_interview.core.security.TokenStore
-import com.example.nyxa_interview.data.remote.mock.MockApiException
+import com.example.nyxa_interview.data.remote.AuthenticatedApiGateway
 import com.example.nyxa_interview.data.remote.mock.MockBackend
+import com.example.nyxa_interview.data.remote.mock.toAppError
 import com.example.nyxa_interview.domain.model.Member
 import com.example.nyxa_interview.domain.repository.AuthRepository
 import kotlinx.coroutines.flow.map
@@ -17,6 +17,7 @@ class AuthRepositoryImpl @Inject constructor(
     private val sessionManager: AuthSessionManager,
     private val tokenStore: TokenStore,
     private val mockBackend: MockBackend,
+    private val gateway: AuthenticatedApiGateway,
 ) : AuthRepository {
 
     override val isLoggedIn = tokenStore.observeTokens().map { it != null }
@@ -32,20 +33,6 @@ class AuthRepositoryImpl @Inject constructor(
         sessionManager.logout()
     }
 
-    override suspend fun currentMember(): AppResult<Member> {
-        sessionManager.validAccessToken() ?: return AppResult.Error(AppError.Unauthorized)
-        return try {
-            AppResult.Success(mockBackend.currentMember())
-        } catch (e: MockApiException) {
-            AppResult.Error(e.toAppError())
-        }
-    }
-
-    private fun Throwable.toAppError(): AppError = when (this) {
-        is MockApiException.Unauthorized -> AppError.Unauthorized
-        is MockApiException.ServerError -> AppError.Network
-        is MockApiException.DroppedConnection -> AppError.Timeout
-        is MockApiException.NotFound -> AppError.Server(message.orEmpty())
-        else -> AppError.Unknown(this)
-    }
+    override suspend fun currentMember(): AppResult<Member> =
+        gateway.call { mockBackend.currentMember() }
 }

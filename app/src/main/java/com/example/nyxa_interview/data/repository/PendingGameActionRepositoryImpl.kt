@@ -1,43 +1,36 @@
 package com.example.nyxa_interview.data.repository
 
-import com.example.nyxa_interview.data.local.dao.PendingGameActionDao
-import com.example.nyxa_interview.data.local.entity.PendingGameActionEntity
-import com.example.nyxa_interview.domain.model.BoxTier
 import com.example.nyxa_interview.domain.repository.PendingGameAction
 import com.example.nyxa_interview.domain.repository.PendingGameActionRepository
-import com.example.nyxa_interview.domain.repository.PendingGameKind
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import javax.inject.Inject
 import javax.inject.Singleton
 
+/**
+ * Held purely in memory, keyed by idempotencyKey — nothing is written to disk besides the auth
+ * token. Recovery of a dropped-connection spin/box still works within the current app session
+ * (the scenario shown in the demo recording), but not after a real process kill, since there is
+ * no on-disk record to resume from on next launch. A deliberate scope cut given the assignment's
+ * time limit (see DECISIONS.md).
+ */
 @Singleton
-class PendingGameActionRepositoryImpl @Inject constructor(
-    private val dao: PendingGameActionDao,
-) : PendingGameActionRepository {
+class PendingGameActionRepositoryImpl @Inject constructor() : PendingGameActionRepository {
 
-    override fun observePending() = dao.observeAll().map { list -> list.map { it.toDomain() } }
+    private val mutex = Mutex()
+    private val pendingState = MutableStateFlow<List<PendingGameAction>>(emptyList())
 
-    override suspend fun markPending(action: PendingGameAction) {
-        dao.upsert(action.toEntity())
+    override fun observePending() = pendingState.asStateFlow()
+
+    override suspend fun markPending(action: PendingGameAction) = mutex.withLock {
+        pendingState.value = pendingState.value.filterNot { it.idempotencyKey == action.idempotencyKey } + action
     }
 
-    override suspend fun clearPending(idempotencyKey: String) {
-        dao.deleteByKey(idempotencyKey)
+    override suspend fun clearPending(idempotencyKey: String) = mutex.withLock {
+        pendingState.value = pendingState.value.filterNot { it.idempotencyKey == idempotencyKey }
     }
 
-    override suspend fun getPending(): List<PendingGameAction> = dao.getAll().map { it.toDomain() }
-
-    private fun PendingGameActionEntity.toDomain() = PendingGameAction(
-        idempotencyKey = idempotencyKey,
-        kind = PendingGameKind.valueOf(kind),
-        boxTier = boxTier?.let { BoxTier.valueOf(it) },
-        createdAt = createdAt,
-    )
-
-    private fun PendingGameAction.toEntity() = PendingGameActionEntity(
-        idempotencyKey = idempotencyKey,
-        kind = kind.name,
-        boxTier = boxTier?.name,
-        createdAt = createdAt,
-    )
+    override suspend fun getPending(): List<PendingGameAction> = pendingState.value
 }

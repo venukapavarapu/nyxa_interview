@@ -10,8 +10,10 @@ The app is Clean Architecture in three layers, each a package under `com.example
   live review can reason about without touching a single Compose file.
 - **`data/`** — implements the domain interfaces. `MockBackend` stands in for the real Shopify +
   games API described in the brief; `ProductNormalizer` is the anti-corruption layer that resolves
-  the two catalogue wire shapes into one domain `Product`; Room (`AppDatabase`) is the local cache
-  for wallet/ledger and pending-game-action durability; `EncryptedTokenStore` wraps Android Keystore.
+  the two catalogue wire shapes into one domain `Product`; `EncryptedTokenStore` wraps Android
+  Keystore for the auth token, the only thing this app writes to disk (see section 7 — a
+  deliberate scope cut for the assignment's time limit; wallet/ledger and pending-game-action
+  state are in-memory only, so they don't survive a real process kill).
 - **`presentation/`** — one package per feature (`auth/login`, `store/grid`, `store/detail`,
   `checkout`, `spin`, `box`, `wallet`), each following MVI: `*Contract.kt` (State/Intent/Effect),
   `*ViewModel.kt` (extends a shared `MviViewModel` base), and a stateless `*Screen.kt` Composable
@@ -69,7 +71,7 @@ already flow through `SpinResult` so that screen is additive, not a re-architect
 
 Sequence, matching `PerformSpinUseCase`:
 
-1. Client generates `idempotencyKey`, **persists it locally as pending** (Room, via
+1. Client generates `idempotencyKey`, records it as pending (in memory, via
    `PendingGameActionRepository.markPending`) *before* any network call. **Failure point A:**
    process death right here — nothing was charged yet, nothing to recover, safe.
 2. Client calls `POST /games/spin` with that key.
@@ -84,14 +86,17 @@ Sequence, matching `PerformSpinUseCase`:
 5. Once the server has the result (it always does, by step 3's construction), recovery finds it,
    the pending record is cleared, the wallet is refreshed, and the wheel animates to the real
    result the user already paid for.
-6. **Failure point C:** the app is killed before recovery finishes. On next launch,
-   `SpinViewModel.recoverOnLaunch()` re-reads pending records from Room (durable, survives process
-   death) and resumes the same recovery flow.
 
-Net effect: the spin credit is decremented exactly once (server-side, at settlement — never on the
-client), and the user is guaranteed to eventually see the result they paid for, regardless of how
-many times the request is retried or the app is killed, because every retry reuses the same
-`idempotencyKey` and the server's `spinResultsByKey` map is authoritative.
+The credit is still decremented exactly once no matter how many times the *request* is retried,
+because the server (not the client) is the idempotency de-dup authority — that guarantee holds
+regardless of what the client persists. The one thing that does **not** survive is a real process
+kill mid-recovery: since the pending record lives in memory only (see section 7 — a deliberate
+scope cut for the 6-hour time limit, not a gap in the charge-once logic itself), an app kill
+between failure point B and step 5 loses the client's own memory that a spin is unresolved. The
+money is safe either way — nothing is double-charged, because that guarantee lives entirely on
+the server — but the "show them the result on next launch" UX would need on-disk persistence to
+work after a real kill, and this build only demonstrates it within a single app session (which is
+exactly what the screen recording shows).
 
 ## 4. Animation
 
@@ -195,20 +200,33 @@ even against the mock.
 
 ## 7. Scope
 
+**Local persistence, cut for time:** nothing is written to disk except the auth token
+(`EncryptedTokenStore`, Android Keystore-backed). Wallet/ledger and the pending-spin/box tracking
+used for the dropped-connection recovery guarantee are both held in memory only. This means
+section 4.3's "ledger renders from local cache with no network on cold launch" is not fully met —
+on a real cold start the wallet is empty until the first `refresh()` completes — and the
+dropped-connection recovery flow (4.2) only survives within the current app session, not a real
+process kill and relaunch. Both are explicit requirements in the brief; I'm calling out the gap
+directly rather than overstating what's built, given the assignment's own 6-hour limit didn't
+leave room to add a persistence layer (Room, or even a flat file) on top of everything else in
+scope. If I had the time back, this is the first thing I'd add, and the seam is already in place
+to do it: `WalletRepositoryImpl` and `PendingGameActionRepositoryImpl` sit behind
+`WalletRepository`/`PendingGameActionRepository` interfaces, so swapping the in-memory
+`MutableStateFlow` for something disk-backed touches only those two files, nothing upstream.
+
 **Deliberately left out** (beyond the explicit 4.6 out-of-scope list): server-driven wheel segment
 theming/config screen; a "verify this spin was fair" seed-reveal screen (the data is there —
 `serverSeed`/`clientSeedEcho` — but no UI consumes it); retry/backoff configuration exposed to the
 user; multi-collection store browsing (only one collection, per 4.4's "single collection"
 requirement); accessibility pass (TalkBack labels, dynamic type) beyond default Material3
-behavior; offline queuing of checkout/spin *requests* themselves (today, "offline" means "the
-wallet/ledger still renders from cache," not "you can spin with no network and it queues").
+behavior; offline queuing of checkout/spin *requests* themselves.
 
-**First three hours if I had them:** (1) a seed-reveal / fairness-verification screen using the
-already-plumbed `serverSeed`/`clientSeedEcho`, since it's the most direct way to make "game
-integrity" tangible rather than just asserted in this log; (2) real GPU-profiled 60fps validation
-of the wheel and the 1,200-item grid on a physical low-end device, not just the emulator; (3) an
-optimistic-update path for cart quantity changes (increase/decrease on the cart page currently
-waits on the mock round-trip before updating, which is correct but not as snappy as it could be).
+**First three hours if I had them:** (1) local persistence for the wallet/ledger and pending-game
+tracking (see above — this is the biggest real gap against the brief, not a nice-to-have); (2) a
+seed-reveal / fairness-verification screen using the already-plumbed `serverSeed`/`clientSeedEcho`,
+since it's the most direct way to make "game integrity" tangible rather than just asserted in this
+log; (3) real GPU-profiled 60fps validation of the wheel and the 1,200-item grid on a physical
+low-end device, not just the emulator.
 
 (Store grid initial-load failure now does show a proper error state with a Retry button — found
 missing during manual on-device testing and fixed; noted here since it was originally listed as

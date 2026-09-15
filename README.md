@@ -7,14 +7,17 @@ secure token storage, both called out explicitly in the assignment brief.
 ## Architecture at a glance
 
 - **Clean Architecture**, 3 layers: `domain/` (pure Kotlin — models, repository interfaces, use
-  cases), `data/` (repository implementations, the in-process mock backend, Room cache, encrypted
-  token store), `presentation/` (one MVI feature per screen: Contract + ViewModel + Screen).
+  cases), `data/` (repository implementations, the in-process mock backend, encrypted token
+  store), `presentation/` (one MVI feature per screen: Contract + ViewModel + Screen).
 - **MVI**: every feature has an immutable `UiState`, a sealed `UiIntent`, and a sealed one-shot
   `UiEffect`, driven by a shared `MviViewModel` base class.
 - **DI**: Dagger Hilt throughout.
 - **Async**: Kotlin Coroutines + Flow everywhere; no callbacks, no RxJava.
-- **Persistence**: Room (wallet/ledger cache + pending-game-action durability), Android Keystore
-  via `androidx.security.crypto.EncryptedSharedPreferences` (auth tokens).
+- **Persistence**: only the auth token is written to disk, via Android Keystore
+  (`androidx.security.crypto.EncryptedSharedPreferences`). Wallet/ledger and pending-game-action
+  tracking are in-memory only — a deliberate scope cut given the assignment's time limit, called
+  out explicitly in `DECISIONS.md` section 7 rather than silently not meeting the brief's "renders
+  from local cache" wording.
 - **Optional feature implemented**: Option A, Mystery Box Reveal.
 
 See `DECISIONS.md` for the full architecture/design rationale, game-integrity walkthrough, and
@@ -51,9 +54,11 @@ within a couple of seconds it finds the real result and the wheel decelerates on
 result you were charged for, never a re-roll. Since it's a 15% chance per spin, retapping Spin a
 few times will reliably reproduce it for the recording.
 
-If the app is killed mid-recovery (e.g. via "Force stop" from Android system settings) and
-relaunched, the pending spin is picked up again on cold start from Room-backed local state — no
-network needed to know a spin is still unresolved.
+This works within the current app session — the pending-spin record is held in memory only (see
+`DECISIONS.md` section 7), not persisted to disk, so a real process kill mid-recovery loses the
+client's own memory that a spin is unresolved. The money is still safe (the server never
+double-charges, regardless of what the client remembers), but the "show the result on next
+launch" UX only demonstrates cleanly without a real kill in between.
 
 ## Tests
 
@@ -111,6 +116,7 @@ showed up when the app was actually run and tapped through.
 
 ## Screen recording
 
-See the submission's attached recording, or reproduce it: login → Spin tab, tap the debug drop
-toggle then Spin (shows recovery) → Store tab → tap a product → Add to cart → Cart → Place order
-(retry once if the 15% failure hits) → Wallet tab showing the updated ledger and balance.
+See the submission's attached recording, or reproduce it: login → Spin tab, tap Spin a few times
+until the 15% dropped-connection scenario hits (shows recovery) → Store tab → tap a product → Add
+to cart → Cart → Place order (retry once if the 15% failure hits) → Wallet tab showing the
+updated ledger and balance.
