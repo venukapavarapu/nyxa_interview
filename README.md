@@ -43,18 +43,13 @@ spec.
 ## Triggering the dropped-connection spin in the mock
 
 The brief requires demonstrating "the server settles a spin but the client never receives the
-response." Two ways to see it:
-
-**A. On demand (recommended for the recording):** On the Spin tab, tap **"Debug: drop next spin's
-response"** (visible in debug builds only, via `BuildConfig.DEBUG`) before tapping **Spin**. This
-forces exactly the next spin request to simulate a dropped connection after the server has
-already settled it. The Spin button stays disabled and the header shows **"Resolving…"** while
-the app polls the recovery endpoint in the background; within a couple of seconds it recovers the
-real result and the wheel animates to it — the same result you were charged for, never a re-roll.
-
-**B. Naturally:** the mock's baseline 15% random failure rate will eventually produce the same
-scenario on an ordinary spin without the debug toggle — the recovery path is identical either way,
-the debug toggle just makes it deterministic for the demo instead of waiting on chance.
+response." The mock's baseline 15% random failure rate produces this scenario naturally on an
+ordinary spin — no separate toggle needed. When it happens: the wheel keeps spinning (it never
+freezes or shows a "Resolving…" status message — the animation itself is the only feedback while
+recovery runs in the background) and the Spin control stays disabled until recovery completes;
+within a couple of seconds it finds the real result and the wheel decelerates onto it — the same
+result you were charged for, never a re-roll. Since it's a 15% chance per spin, retapping Spin a
+few times will reliably reproduce it for the recording.
 
 If the app is killed mid-recovery (e.g. via "Force stop" from Android system settings) and
 relaunched, the pending spin is picked up again on cold start from Room-backed local state — no
@@ -62,11 +57,13 @@ network needed to know a spin is still unresolved.
 
 ## Tests
 
-`./gradlew :app:testDebugUnitTest` — unit tests covering (per section 5 of the brief):
+`./gradlew :app:testDebugUnitTest` — 40+ unit tests covering (per section 5 of the brief) and
+beyond:
 
 1. **Spin result recovery path** — `domain/usecase/SpinRecoveryTest.kt`: dropped-connection
    charge-once behavior, recovery clearing pending state, transient-failure-vs-still-unknown
-   handling.
+   handling, and a spin rejected for insufficient credits never entering recovery (nothing was
+   charged, so there's nothing to recover).
 2. **Checkout idempotency** — `domain/usecase/CheckoutUseCaseTest.kt` (use-case level, mocked
    repositories) and `data/remote/mock/MockBackendCheckoutIdempotencyTest.kt` (server-level
    de-dup, including a simulated concurrent double-tap).
@@ -74,20 +71,43 @@ network needed to know a spin is still unresolved.
    malformed-price fallback, sold-out variant detection.
 
 Plus `data/remote/mock/MockBackendSpinIdempotencyTest.kt` (server-side spin de-dup and credit
-accounting) and `presentation/navigation/ProductRouteEncodingTest.kt` (regression test for a real
-bug found during manual testing — see below).
+accounting), `data/remote/mock/MockBackendSpinCreditsTest.kt` and `presentation/spin/SpinUiStateTest.kt`
+(a spin must be rejected once credits hit zero — see the bug list below),
+`data/remote/mock/MockBackendCartQuantityTest.kt` and `presentation/checkout/CheckoutViewModelQuantityTest.kt`
+(cart quantity increase/decrease, merge-on-same-variant, remove-on-zero), `domain/model/CartTest.kt`,
+and `presentation/navigation/ProductRouteEncodingTest.kt` (regression test for a bug found during
+manual testing — see below).
 
-## A bug found via manual on-device testing
+## Bugs found via manual on-device testing
 
-While walking the store flow on an emulator, tapping a product crashed the app:
-`IllegalArgumentException: Navigation destination that matches route product/gid://shopify/Product/0
-cannot be found`. Product ids contain `/` (e.g. `gid://shopify/Product/0`), and
-Navigation-Compose's default String path-argument parsing splits on `/`, so the id broke the route
-pattern. Fixed by URL-encoding the id when building the route and decoding it when reading the nav
-argument (`presentation/navigation/NyxaNavHost.kt`, `presentation/store/detail/ProductDetailViewModel.kt`),
-with a regression test added. Left in this README because it's a good illustration of why the
-assignment's "screen recording + live review" format matters — this class of bug is invisible from
-reading the code and only shows up when you actually tap through the app.
+This app was built with an AI pair-programming tool (see `DECISIONS.md` section 8) but every
+feature was exercised by hand on an emulator before being called done, and several real defects
+only surfaced that way — none of them were visible from reading the code alone:
+
+- **Navigation crash on any product tap.** Product ids contain `/` (e.g.
+  `gid://shopify/Product/0`), and Navigation-Compose's default String path-argument parsing splits
+  on `/`, so the id broke the route pattern with `IllegalArgumentException: Navigation destination
+  ... cannot be found`. Fixed by URL-encoding the id when building the route and decoding it when
+  reading the nav argument.
+- **Spin credits could go negative-effectively-free.** With 0 spin credits, tapping Spin still
+  fired a request and the mock server settled it anyway, silently clamping the credit counter at
+  zero instead of rejecting the spin — a real financial-integrity bug, letting a user spin (and
+  win) for free indefinitely. Fixed by rejecting the request server-side before settlement.
+- **Wheel animation speed bugs**, found only by watching it run: chained per-lap tween calls
+  caused a visible speed change at every full rotation; a later fix still let the landing
+  animation start faster than the "waiting" spin when the target segment was far away. Both fixed
+  by driving the wait phase off the raw frame clock and solving the landing tween's duration per
+  spin so it can only ever decelerate, never speed up.
+- **"Add to cart" button text nearly invisible.** Adding the quantity stepper to the product
+  detail page pushed the button below the screen's visible area (no scroll on that screen), so
+  only a sliver of clipped pixels was visible. Fixed by adding `verticalScroll`.
+- **Store grid went silently blank on a failed load.** The mock's normal 15% random failure rate
+  hitting the initial product fetch left the screen empty with no error message and no retry
+  affordance. Fixed by adding a proper error state with a Retry button.
+
+Left in this README because it's a good illustration of why the assignment's "screen recording +
+live review" format matters — every one of these is invisible from reading the code and only
+showed up when the app was actually run and tapped through.
 
 ## Screen recording
 

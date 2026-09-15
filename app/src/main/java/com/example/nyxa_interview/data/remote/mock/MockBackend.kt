@@ -109,6 +109,25 @@ class MockBackend @Inject constructor(
         updated
     }
 
+    /** Sets a line's quantity to an exact value. A quantity of 0 or less removes the line entirely. */
+    suspend fun updateCartLineQuantity(variantId: String, quantity: Int): Cart = mutex.withLock {
+        conditions.simulateLatency()
+        maybeFail()
+        val existing = cart ?: throw MockApiException.NotFound("cart")
+        val updatedLines = existing.lines.toMutableList()
+        val existingIndex = updatedLines.indexOfFirst { it.variant.id == variantId }
+        if (existingIndex < 0) throw MockApiException.NotFound("line for variant $variantId")
+
+        if (quantity <= 0) {
+            updatedLines.removeAt(existingIndex)
+        } else {
+            updatedLines[existingIndex] = updatedLines[existingIndex].copy(quantity = quantity)
+        }
+        val updated = existing.copy(lines = updatedLines)
+        cart = updated
+        updated
+    }
+
     suspend fun checkout(cartId: String, idempotencyKey: String): ServerCheckoutRecord = mutex.withLock {
         conditions.simulateLatency()
 
@@ -140,6 +159,13 @@ class MockBackend @Inject constructor(
         conditions.simulateLatency()
 
         spinResultsByKey[idempotencyKey]?.let { return@withLock it }
+
+        // Credit check happens inside the lock, atomically with settlement, so a burst of
+        // concurrent requests (e.g. a slipped-through double tap) can never settle more spins
+        // than the user has actually paid for.
+        if (spinCredits <= 0) {
+            throw MockApiException.InsufficientSpinCredits()
+        }
 
         val settled = settleSpin(idempotencyKey)
 

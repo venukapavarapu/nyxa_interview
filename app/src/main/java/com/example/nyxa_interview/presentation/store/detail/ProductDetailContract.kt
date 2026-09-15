@@ -26,5 +26,6 @@ sealed interface ProductDetailIntent : UiIntent {
 }
 
 sealed interface ProductDetailEffect : UiEffect {
-    data object AddedToCart : ProductDetailEffect
+    /** Item was added successfully; the caller stays on this screen and shows a confirmation snackbar. */
+    data class AddedToCart(val productTitle: String) : ProductDetailEffect
 }

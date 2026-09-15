@@ -10,12 +10,17 @@ enum class SpinPhase { IDLE, REQUESTING, ANIMATING, RESOLVING, SETTLED }
 data class SpinUiState(
     val segments: List<String> = DEFAULT_SEGMENTS,
     val phase: SpinPhase = SpinPhase.IDLE,
+    val spinCredits: Int = 0,
     val pendingResult: SpinResult? = null,
     val lastResult: SpinResult? = null,
     val errorMessage: String? = null,
 ) : UiState {
-    /** Disabled for the full duration of a spin, including recovery, so a double tap can never fire two spins. */
-    val isSpinEnabled: Boolean get() = phase == SpinPhase.IDLE
+    /**
+     * Disabled for the full duration of a spin (including recovery) so a double tap can never
+     * fire two spins, and disabled with no credits so a tap never round-trips to the server for
+     * a spin the user can't pay for.
+     */
+    val isSpinEnabled: Boolean get() = phase == SpinPhase.IDLE && spinCredits > 0
 
     companion object {
         val DEFAULT_SEGMENTS = listOf("$250K", "$100K", "$10K", "$5", "VIP Merch", "$5", "$10K", "$5")

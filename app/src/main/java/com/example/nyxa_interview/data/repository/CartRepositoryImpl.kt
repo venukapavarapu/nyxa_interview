@@ -28,6 +28,14 @@ class CartRepositoryImpl @Inject constructor(
         return result
     }
 
+    override suspend fun updateQuantity(variantId: String, quantity: Int): AppResult<Cart> {
+        val result = gateway.call { mockBackend.updateCartLineQuantity(variantId, quantity) }
+        if (result is AppResult.Success) {
+            cartState.value = result.data
+        }
+        return result
+    }
+
     override suspend fun clear() {
         cartState.value = null
     }

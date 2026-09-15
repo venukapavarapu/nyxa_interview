@@ -111,7 +111,7 @@ fun NyxaNavHost(isLoggedIn: Boolean, showDebugControls: Boolean = true) {
             composable(route = Routes.PRODUCT_DETAIL) {
                 ProductDetailRoute(
                     onBack = { navController.popBackStack() },
-                    onAddedToCart = { navController.navigate(Routes.CART) },
+                    onOpenCart = { navController.navigate(Routes.CART) },
                 )
             }
 

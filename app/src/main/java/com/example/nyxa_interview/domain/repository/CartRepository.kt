@@ -8,5 +8,7 @@ import kotlinx.coroutines.flow.StateFlow
 interface CartRepository {
     val cart: StateFlow<Cart?>
     suspend fun addLine(product: Product, variantId: String, quantity: Int): AppResult<Cart>
+    /** Sets a line's quantity to an exact value. A quantity of 0 or less removes the line. */
+    suspend fun updateQuantity(variantId: String, quantity: Int): AppResult<Cart>
     suspend fun clear()
 }

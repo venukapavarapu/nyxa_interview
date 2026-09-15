@@ -33,6 +33,22 @@ class CheckoutViewModel @Inject constructor(
         when (intent) {
             CheckoutIntent.PlaceOrder -> placeOrder()
             CheckoutIntent.DismissConfirmation -> setState { copy(orderConfirmation = null) }
+            is CheckoutIntent.IncreaseQuantity -> changeQuantity(intent.variantId, intent.currentQuantity + 1)
+            is CheckoutIntent.DecreaseQuantity -> changeQuantity(intent.variantId, intent.currentQuantity - 1)
+        }
+    }
+
+    private fun changeQuantity(variantId: String, newQuantity: Int) {
+        if (variantId in currentState.linesUpdating) return
+
+        setState { copy(linesUpdating = linesUpdating + variantId, errorMessage = null) }
+        viewModelScope.launch {
+            when (val result = cartRepository.updateQuantity(variantId, newQuantity)) {
+                is AppResult.Success -> setState { copy(linesUpdating = linesUpdating - variantId) }
+                is AppResult.Error -> setState {
+                    copy(linesUpdating = linesUpdating - variantId, errorMessage = "Couldn't update quantity, please try again.")
+                }
+            }
         }
     }
 

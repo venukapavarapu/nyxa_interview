@@ -9,6 +9,7 @@ sealed interface AppError {
     data object Network : AppError
     data object Timeout : AppError
     data object Unauthorized : AppError
+    data object InsufficientCredits : AppError
     data class Server(val message: String) : AppError
     data class Unknown(val throwable: Throwable? = null) : AppError
 }

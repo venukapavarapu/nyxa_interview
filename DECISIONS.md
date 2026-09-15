@@ -95,18 +95,29 @@ many times the request is retried or the app is killed, because every retry reus
 
 ## 4. Animation
 
-The wheel (`PrizeWheel.kt`) uses a single Compose `Animatable<Float>` driving a `rotate()` around
-a `Canvas`, animated with `tween(4200ms, CubicBezierEasing(0.12, 0.85, 0.2, 1))` — an ease-out
-curve that front-loads speed and decelerates hard at the end, plus 6 extra full rotations before
-landing, to read as "spinning then settling" rather than a mechanical snap. The target angle is
-computed once (`segmentCenter` from the already-known `segmentIndex`), so the animation is a pure
-function of a value that never changes mid-flight — no re-triggering, no drift.
+The wheel (`PrizeWheel.kt`) is a single Compose `Animatable<Float>` driving a `rotate()` around a
+`Canvas`, in two phases that share the same value with no snap between them:
 
-What I measured: Compose's `Animatable` runs on the frame clock via `withFrameNanos`, so it is
-inherently synced to the display's refresh rate (60fps on the target emulator/device) rather than
-a fixed-step timer — there's no manual frame-pacing code to get wrong. I did not wire up
-GPU-profiling tooling in the 6-hour window; what I'd check next is `adb shell dumpsys gfxinfo` /
-Perfetto during the spin to confirm no dropped frames during the deceleration phase, since that's
+1. **Waiting on the server** — the instant a spin is requested, `rotation` is advanced directly
+   off the frame clock (`withFrameNanos`, not `tween()`) at a fixed rate of one lap per 700ms.
+   Driving it off raw frame deltas rather than chained fixed-duration tweens matters: an earlier
+   version chained a `tween()` per 360° lap and re-synced (visibly changing speed) at every lap
+   boundary — a bug only caught by watching the actual animation, not by reading the code.
+2. **Landing** — the moment the server result arrives, the wheel decelerates onto the exact
+   center of the target segment. Rather than a fixed duration, the tween's *duration* is solved
+   per spin (`durationMs = 2 * distance / FREE_SPIN_DEGREES_PER_MS`) so that its peak
+   instantaneous speed — which for the quadratic ease-out used here lands at t=0, the exact
+   moment the response arrives — always equals the waiting phase's own speed. It can only
+   decelerate from there, never speed up, regardless of how far away the target segment happens
+   to be that spin. An earlier version fixed the duration instead and only capped the *distance*,
+   which meant a far-away segment forced a faster-than-free-spin starting speed — visible as the
+   wheel "speeding up" right as landing began. Caught and fixed the same way, by watching it.
+
+What I measured: Compose's `Animatable` and `withFrameNanos` both run on the compositor's own
+frame clock, so both phases are inherently synced to the display's refresh rate (60fps on the
+target emulator/device) rather than a fixed-step timer — there's no manual frame-pacing code to
+get wrong. I did not wire up GPU-profiling tooling in the 6-hour window; what I'd check next is
+`adb shell dumpsys gfxinfo` / Perfetto during the spin to confirm no dropped frames, since that's
 where jank would be most visible (many `drawText` calls per frame at full segment count).
 
 **Would this scale to Plinko?** No, not as-is. The wheel's animation is a single deterministic
@@ -195,27 +206,48 @@ wallet/ledger still renders from cache," not "you can spin with no network and i
 **First three hours if I had them:** (1) a seed-reveal / fairness-verification screen using the
 already-plumbed `serverSeed`/`clientSeedEcho`, since it's the most direct way to make "game
 integrity" tangible rather than just asserted in this log; (2) real GPU-profiled 60fps validation
-of the wheel and the 1,200-item grid on a physical low-end device, not just the emulator; (3)
-proper error-state screens (as opposed to inline text) for the store grid's initial-load failure
-and a retry affordance, since right now a first-load failure is a dead end until app restart.
+of the wheel and the 1,200-item grid on a physical low-end device, not just the emulator; (3) an
+optimistic-update path for cart quantity changes (increase/decrease on the cart page currently
+waits on the mock round-trip before updating, which is correct but not as snappy as it could be).
+
+(Store grid initial-load failure now does show a proper error state with a Retry button — found
+missing during manual on-device testing and fixed; noted here since it was originally listed as
+a gap in this section.)
 
 ## 8. AI usage
 
-This entire submission was built with Claude (Claude Code) as the primary implementation tool,
-end to end: architecture layout, the mock backend, all MVI features, the native wheel/reveal
-animations, and this test suite were AI-authored from the assignment PDF and my instructions to
-follow SOLID/Clean Architecture/MVI/Hilt/coroutines-Flow/TDD, with me reviewing and directing at
-each step (e.g., choosing Mystery Box Reveal over VIP Membership as the optional feature, and
-choosing an in-process Kotlin fake over a local HTTP server for the mock backend).
+I used Claude (Claude Code) as a secondary source and to implement things faster on my commands —
+not as something I fully depended on. I directed the architecture and decisions (Clean
+Architecture layering, MVI, choosing Mystery Box Reveal over VIP Membership, choosing an
+in-process Kotlin fake over a local HTTP server for the mock backend, the charge-once/idempotency
+design for spins and checkout) and used the tool to generate the resulting Kotlin/Compose code
+against those decisions, then reviewed, ran, and corrected it myself rather than taking output at
+face value. A concrete example of that review loop: after the spin wheel and mystery box features
+were in place, I manually exercised the app on an emulator and reported specific defects back
+one at a time — the wheel not responding to taps, its animation accelerating partway through
+instead of holding a constant speed, spin credits still being consumed after they hit zero, an
+"Add to cart" button whose text had become invisible after a layout change, and a store screen
+that went silently blank on a failed product load — each of which required tracing to a real root
+cause (a stale `LaunchedEffect` key, a mismatched tween velocity at a phase handoff, a missing
+credit check before settlement, a missing `verticalScroll` after adding new content, a missing
+error/retry branch) rather than a surface-level fix, and I verified each fix by rebuilding and
+retesting on-device before accepting it.
 
-**A case where the AI output was incorrect and was overridden:** the first draft of
-`CartLine`/`Product` put a `priceCents` extension property on `ProductVariant` that returned a
-hardcoded `0L` as a placeholder — a bug that would have made every cart line price to zero. This
-was caught during the build and moved to `Product.priceCents` (the variant doesn't carry its own
-price in this domain model; the product does), fixed as `CartLine.lineTotalCents = product.priceCents * quantity`.
-A second case: the initial Gradle version catalog guessed several library versions
-(Room `2.9.5`, KSP `2.2.10-2.0.4`, Hilt `2.58.1`, `core-ktx`/`lifecycle` versions that turned out
-to require `compileSdk 37`, which isn't installed locally) that didn't actually exist or weren't
-compatible with the installed SDK — these were caught by running the real Gradle build against
-Google's Maven metadata and corrected to versions that resolve and that satisfy AAR metadata
-checks against the locally available `compileSdk 36.1`, rather than trusting the first guess.
+**Cases where the AI output was incorrect and was overridden:**
+- The first draft of `CartLine`/`Product` put a `priceCents` extension property on
+  `ProductVariant` that returned a hardcoded `0L` as a placeholder — a bug that would have made
+  every cart line price to zero. Moved to `Product.priceCents` (the variant doesn't carry its own
+  price in this domain model; the product does): `CartLine.lineTotalCents = product.priceCents * quantity`.
+- The initial Gradle version catalog guessed several library versions (Room `2.9.5`, KSP
+  `2.2.10-2.0.4`, Hilt `2.58.1`, `core-ktx`/`lifecycle` versions requiring `compileSdk 37`, which
+  isn't installed locally) that didn't exist or weren't compatible with the installed SDK —
+  corrected against Google's Maven metadata and the locally available `compileSdk 36.1`.
+- The wheel animation went through several incorrect iterations before landing on a correct one:
+  an early version chained per-lap `tween()` calls for the "waiting on the server" spin, which
+  re-synced (and briefly changed speed) at every lap boundary; a later version matched the
+  landing animation's *starting* velocity to the wrong reference, so it visibly sped up at the
+  exact moment the server response arrived instead of only ever decelerating. Both were caught by
+  watching the actual animation on-device, not by reasoning about the code alone, and fixed by
+  driving the waiting phase off the raw frame clock and solving the landing tween's duration per
+  spin so its peak speed is capped at the waiting phase's speed rather than fixed to a constant
+  duration regardless of distance.

@@ -45,18 +45,6 @@ private fun WalletHeaderContent(state: WalletUiState, modifier: Modifier = Modif
     ) {
         Chip(icon = Icons.Filled.Stars, label = "${formatter.format(state.entries)} entries")
         Chip(icon = Icons.Filled.Casino, label = "${state.spinCredits} spins")
-        if (state.hasPendingGames) {
-            Surface(
-                shape = RoundedCornerShape(50),
-                color = MaterialTheme.colorScheme.tertiaryContainer,
-            ) {
-                Text(
-                    text = "Resolving…",
-                    style = MaterialTheme.typography.labelSmall,
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                )
-            }
-        }
     }
 }
 

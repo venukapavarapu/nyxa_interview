@@ -89,19 +89,12 @@ private fun SpinScreen(
         PrizeWheel(
             segments = state.segments,
             targetSegmentIndex = animatingTarget,
+            isRequesting = state.phase == SpinPhase.REQUESTING || state.phase == SpinPhase.RESOLVING,
+            enabled = state.isSpinEnabled,
+            onSpinTapped = { onIntent(SpinIntent.SpinTapped) },
             onLandingFinished = onLandingFinished,
             modifier = Modifier.fillMaxWidth().padding(bottom = 32.dp),
         )
-
-        when (state.phase) {
-            SpinPhase.RESOLVING -> Text(
-                text = "Confirming your last spin…",
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.padding(bottom = 12.dp),
-            )
-
-            else -> Unit
-        }
 
         if (state.errorMessage != null) {
             Text(
@@ -111,24 +104,16 @@ private fun SpinScreen(
             )
         }
 
+        val isBusy = state.phase != SpinPhase.IDLE
         Button(
             onClick = { onIntent(SpinIntent.SpinTapped) },
             enabled = state.isSpinEnabled,
             modifier = Modifier.fillMaxWidth(),
         ) {
-            if (!state.isSpinEnabled) {
-                CircularProgressIndicator(modifier = Modifier.size(18.dp), color = MaterialTheme.colorScheme.onPrimary)
-            } else {
-                Text("Spin")
-            }
-        }
-
-        if (showDebugControls) {
-            OutlinedButton(
-                onClick = { onIntent(SpinIntent.ForceDropNextSpin) },
-                modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
-            ) {
-                Text("Debug: drop next spin's response")
+            when {
+                isBusy -> CircularProgressIndicator(modifier = Modifier.size(18.dp), color = MaterialTheme.colorScheme.onPrimary)
+                state.spinCredits <= 0 -> Text("No spin credits left")
+                else -> Text("Spin")
             }
         }
     }

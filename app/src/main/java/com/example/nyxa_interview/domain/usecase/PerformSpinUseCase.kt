@@ -1,6 +1,7 @@
 package com.example.nyxa_interview.domain.usecase
 
 import com.example.nyxa_interview.core.idempotency.IdempotencyKeyGenerator
+import com.example.nyxa_interview.core.result.AppError
 import com.example.nyxa_interview.core.result.AppResult
 import com.example.nyxa_interview.domain.model.SpinResult
 import com.example.nyxa_interview.domain.repository.GamesRepository
@@ -34,6 +35,12 @@ class PerformSpinUseCase @Inject constructor(
         data class Resolved(val result: SpinResult) : SpinOutcome
         /** Charged on the server, but this client doesn't know the result yet (dropped connection or transient failure). */
         data class Unresolved(val idempotencyKey: String) : SpinOutcome
+        /**
+         * Rejected by the server *before* settlement (e.g. no spin credits left). Unlike
+         * [Unresolved], there is nothing to recover — the server never charged anything, so the
+         * pending record is cleared immediately instead of polling a result that will never exist.
+         */
+        data class Rejected(val error: AppError) : SpinOutcome
     }
 
     suspend operator fun invoke(): SpinOutcome {
@@ -54,7 +61,14 @@ class PerformSpinUseCase @Inject constructor(
                 SpinOutcome.Resolved(result.data)
             }
 
-            is AppResult.Error -> SpinOutcome.Unresolved(idempotencyKey)
+            is AppResult.Error -> {
+                if (result.error == AppError.InsufficientCredits) {
+                    pendingGameActionRepository.clearPending(idempotencyKey)
+                    SpinOutcome.Rejected(result.error)
+                } else {
+                    SpinOutcome.Unresolved(idempotencyKey)
+                }
+            }
         }
     }
 }

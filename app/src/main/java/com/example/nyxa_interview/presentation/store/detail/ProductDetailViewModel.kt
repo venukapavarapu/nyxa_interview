@@ -53,8 +53,8 @@ class ProductDetailViewModel @Inject constructor(
         viewModelScope.launch {
             when (val result = cartRepository.addLine(product, variantId, currentState.quantity)) {
                 is AppResult.Success -> {
-                    setState { copy(isAddingToCart = false) }
-                    sendEffect(ProductDetailEffect.AddedToCart)
+                    setState { copy(isAddingToCart = false, quantity = 1) }
+                    sendEffect(ProductDetailEffect.AddedToCart(product.title))
                 }
 
                 is AppResult.Error -> setState {

@@ -108,6 +108,19 @@ class SpinRecoveryTest {
     }
 
     @Test
+    fun `a spin rejected for insufficient credits is not treated as unresolved and never triggers recovery polling`() = runTest {
+        coEvery { gamesRepository.spin(fixedKey) } returns AppResult.Error(AppError.InsufficientCredits)
+
+        val outcome = performSpin()
+
+        assertThat(outcome).isEqualTo(PerformSpinUseCase.SpinOutcome.Rejected(AppError.InsufficientCredits))
+        // Nothing was ever charged server-side, so the pending record is cleared immediately —
+        // there is no result to recover, and polling for one would spin forever for nothing.
+        coVerify(exactly = 1) { pendingGameActionRepository.clearPending(fixedKey) }
+        coVerify(exactly = 0) { walletRepository.refresh() }
+    }
+
+    @Test
     fun `a successful spin on first try clears any pending record and never needs recovery`() = runTest {
         val result = sampleSpinResult()
         coEvery { gamesRepository.spin(fixedKey) } returns AppResult.Success(result)

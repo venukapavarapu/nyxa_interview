@@ -14,12 +14,9 @@ import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ShoppingCart
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -37,6 +34,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import com.example.nyxa_interview.domain.model.Product
+import com.example.nyxa_interview.presentation.checkout.CartIconButton
 import com.example.nyxa_interview.presentation.wallet.WalletHeader
 import kotlinx.coroutines.flow.collectLatest
 
@@ -62,11 +60,7 @@ fun StoreGridRoute(
             Column {
                 TopAppBar(
                     title = { Text("Redline Store") },
-                    actions = {
-                        IconButton(onClick = onOpenCart) {
-                            Icon(Icons.Filled.ShoppingCart, contentDescription = "Cart")
-                        }
-                    },
+                    actions = { CartIconButton(onClick = onOpenCart) },
                 )
                 WalletHeader(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
             }
@@ -77,6 +71,7 @@ fun StoreGridRoute(
             padding = padding,
             onProductClick = { viewModel.onIntent(StoreGridIntent.ProductClicked(it)) },
             onLoadMore = { viewModel.onIntent(StoreGridIntent.LoadMore) },
+            onRetry = { viewModel.onIntent(StoreGridIntent.LoadInitial) },
         )
     }
 }
@@ -87,10 +82,23 @@ private fun StoreGridScreen(
     padding: PaddingValues,
     onProductClick: (String) -> Unit,
     onLoadMore: () -> Unit,
+    onRetry: () -> Unit,
 ) {
     if (state.isInitialLoading && state.products.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
             CircularProgressIndicator()
+        }
+        return
+    }
+
+    if (state.products.isEmpty() && state.errorMessage != null) {
+        Box(modifier = Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(state.errorMessage, style = MaterialTheme.typography.bodyMedium)
+                Button(onClick = onRetry, modifier = Modifier.padding(top = 12.dp)) {
+                    Text("Retry")
+                }
+            }
         }
         return
     }

@@ -32,6 +32,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.nyxa_interview.domain.model.CartLine
+import com.example.nyxa_interview.presentation.common.QuantityStepper
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -44,7 +45,10 @@ fun CheckoutRoute(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Cart") },
+                title = {
+                    val itemCount = state.cart?.totalQuantity ?: 0
+                    Text(if (itemCount > 0) "Cart ($itemCount)" else "Cart")
+                },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -88,7 +92,12 @@ private fun CheckoutScreen(
     Column(modifier = Modifier.fillMaxSize().padding(padding)) {
         LazyColumn(modifier = Modifier.weight(1f), contentPadding = PaddingValues(16.dp)) {
             items(cart.lines, key = { it.variant.id }) { line ->
-                CartLineRow(line)
+                CartLineRow(
+                    line = line,
+                    isUpdating = line.variant.id in state.linesUpdating,
+                    onIncrease = { onIntent(CheckoutIntent.IncreaseQuantity(line.variant.id, line.quantity)) },
+                    onDecrease = { onIntent(CheckoutIntent.DecreaseQuantity(line.variant.id, line.quantity)) },
+                )
                 Divider(modifier = Modifier.padding(vertical = 8.dp))
             }
         }
@@ -127,19 +136,40 @@ private fun CheckoutScreen(
 }
 
 @Composable
-private fun CartLineRow(line: CartLine) {
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Column {
+private fun CartLineRow(
+    line: CartLine,
+    isUpdating: Boolean,
+    onIncrease: () -> Unit,
+    onDecrease: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
             Text(line.product.title, style = MaterialTheme.typography.bodyLarge, maxLines = 1)
             Text(
-                text = "${line.variant.label} × ${line.quantity}",
+                text = line.variant.label,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            Text(
+                text = "$${"%.2f".format(line.lineTotalCents / 100.0)}",
+                style = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier.padding(top = 4.dp),
+            )
         }
-        Text(
-            text = "$${"%.2f".format(line.lineTotalCents / 100.0)}",
-            style = MaterialTheme.typography.bodyLarge,
-        )
+
+        if (isUpdating) {
+            CircularProgressIndicator(modifier = Modifier.size(28.dp).padding(8.dp))
+        } else {
+            QuantityStepper(
+                quantity = line.quantity,
+                onIncrease = onIncrease,
+                onDecrease = onDecrease,
+                minQuantity = 0,
+            )
+        }
     }
 }

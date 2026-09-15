@@ -41,6 +41,7 @@ class AuthenticatedApiGateway @Inject constructor(
         is MockApiException.ServerError -> AppError.Network
         is MockApiException.DroppedConnection -> AppError.Timeout
         is MockApiException.NotFound -> AppError.Server(message.orEmpty())
+        is MockApiException.InsufficientSpinCredits -> AppError.InsufficientCredits
         else -> AppError.Unknown(this)
     }
 }

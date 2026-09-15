@@ -1,7 +1,9 @@
 package com.example.nyxa_interview.presentation.spin
 
 import androidx.lifecycle.viewModelScope
+import com.example.nyxa_interview.core.result.AppError
 import com.example.nyxa_interview.data.remote.mock.MockNetworkConditions
+import com.example.nyxa_interview.domain.repository.WalletRepository
 import com.example.nyxa_interview.domain.usecase.PerformSpinUseCase
 import com.example.nyxa_interview.domain.usecase.RecoverPendingGamesUseCase
 import com.example.nyxa_interview.domain.usecase.RecoveredGame
@@ -22,11 +24,21 @@ import javax.inject.Inject
 class SpinViewModel @Inject constructor(
     private val performSpinUseCase: PerformSpinUseCase,
     private val recoverPendingGamesUseCase: RecoverPendingGamesUseCase,
+    private val walletRepository: WalletRepository,
     private val networkConditions: MockNetworkConditions,
 ) : MviViewModel<SpinUiState, SpinIntent, SpinEffect>(SpinUiState()) {
 
     init {
         recoverOnLaunch()
+        observeSpinCredits()
+    }
+
+    private fun observeSpinCredits() {
+        viewModelScope.launch {
+            walletRepository.observeWallet().collect { wallet ->
+                setState { copy(spinCredits = wallet.spinCredits) }
+            }
+        }
     }
 
     override fun onIntent(intent: SpinIntent) {
@@ -59,8 +71,17 @@ class SpinViewModel @Inject constructor(
                 }
 
                 is PerformSpinUseCase.SpinOutcome.Unresolved -> resolvePending()
+
+                is PerformSpinUseCase.SpinOutcome.Rejected -> setState {
+                    copy(phase = SpinPhase.IDLE, errorMessage = outcome.error.toSpinMessage())
+                }
             }
         }
+    }
+
+    private fun AppError.toSpinMessage(): String = when (this) {
+        AppError.InsufficientCredits -> "You're out of spin credits."
+        else -> "Couldn't start your spin. Please try again."
     }
 
     /** Polls the recovery endpoint with backoff until the charged-but-undelivered spin resolves. */

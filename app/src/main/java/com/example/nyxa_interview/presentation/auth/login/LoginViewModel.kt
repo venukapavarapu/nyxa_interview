@@ -45,6 +45,7 @@ class LoginViewModel @Inject constructor(
         AppError.Network -> "Network hiccup, please try again."
         AppError.Timeout -> "Request timed out, please try again."
         AppError.Unauthorized -> "Invalid email or password."
+        AppError.InsufficientCredits -> "Something went wrong on our end."
         is AppError.Server -> "Something went wrong on our end."
         is AppError.Unknown -> "Please enter your email and password."
     }
