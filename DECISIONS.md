@@ -216,21 +216,24 @@ a gap in this section.)
 
 ## 8. AI usage
 
-I used Claude (Claude Code) as a secondary source and to implement things faster on my commands —
-not as something I fully depended on. I directed the architecture and decisions (Clean
-Architecture layering, MVI, choosing Mystery Box Reveal over VIP Membership, choosing an
-in-process Kotlin fake over a local HTTP server for the mock backend, the charge-once/idempotency
-design for spins and checkout) and used the tool to generate the resulting Kotlin/Compose code
-against those decisions, then reviewed, ran, and corrected it myself rather than taking output at
-face value. A concrete example of that review loop: after the spin wheel and mystery box features
-were in place, I manually exercised the app on an emulator and reported specific defects back
-one at a time — the wheel not responding to taps, its animation accelerating partway through
-instead of holding a constant speed, spin credits still being consumed after they hit zero, an
-"Add to cart" button whose text had become invisible after a layout change, and a store screen
-that went silently blank on a failed product load — each of which required tracing to a real root
-cause (a stale `LaunchedEffect` key, a mismatched tween velocity at a phase handoff, a missing
-credit check before settlement, a missing `verticalScroll` after adding new content, a missing
-error/retry branch) rather than a surface-level fix, and I verified each fix by rebuilding and
+Initially I understood the product requirement and designed the high-level architecture myself —
+the Clean Architecture layering, MVI per feature, how the flow between screens should work, and
+how access tokens should be stored — before writing any code. Once those decisions were made, I
+used Claude (Claude Code) as a **secondary implementation tool**: I directed it to implement
+against those decisions (SOLID principles, the preferred stack, the specific architecture already
+chosen), rather than asking it to design the app. I was not fully dependent on it — everything it
+produced was something I reviewed, ran, and held accountable to my own decisions, not accepted at
+face value.
+
+A concrete example of that review loop: after the spin wheel and mystery box features were in
+place, I manually exercised the app on an emulator and reported specific defects back one at a
+time — the wheel not responding to taps, its animation accelerating partway through instead of
+holding a constant speed, spin credits still being consumed after they hit zero, an "Add to cart"
+button whose text had become invisible after a layout change, and a store screen that went
+silently blank on a failed product load — each of which required tracing to a real root cause (a
+stale `LaunchedEffect` key, a mismatched tween velocity at a phase handoff, a missing credit check
+before settlement, a missing `verticalScroll` after adding new content, a missing error/retry
+branch) rather than a surface-level fix, and I verified each fix myself by rebuilding and
 retesting on-device before accepting it.
 
 **Cases where the AI output was incorrect and was overridden:**
