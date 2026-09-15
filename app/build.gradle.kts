@@ -34,6 +34,10 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
+        // minSdk is 24, but java.time (Instant, ZoneId, DateTimeFormatter — used for the wallet
+        // ledger) is only available natively from API 26. Desugaring backports it instead of
+        // raising minSdk or gating those code paths behind a Build.VERSION.SDK_INT check.
+        isCoreLibraryDesugaringEnabled = true
     }
     buildFeatures {
         compose = true
@@ -75,6 +79,8 @@ dependencies {
     implementation(libs.androidx.security.crypto)
 
     implementation(libs.coil.compose)
+
+    coreLibraryDesugaring(libs.android.desugar.jdk.libs)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
